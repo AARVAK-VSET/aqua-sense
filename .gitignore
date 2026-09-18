@@ -1,0 +1,17 @@
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# Editors & IDEs
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# Build / Temp / Logs
+*.log
+_site/
+.sass-cache/
+.jekyll-cache/
+.jekyll-metadata
