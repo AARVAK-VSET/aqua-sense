@@ -49,11 +49,17 @@
         text-align: center;
         font-weight: 800;
       }
+
+      #cache-banner {
+        margin-bottom: 20px;
+        font-weight: 600;
+      }
     </style>
   </head>
 
   <body>
     <div class="container">
+      <div id="cache-banner" class="alert alert-info text-center" hidden></div>
       <center>
         <h1 class="title">AquaSense</h1>
         <p>
@@ -125,22 +131,76 @@
     <script type="text/javascript" src="lib/createWaterBall-jquery.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
     <script>
-      //var x=30;
-      //alert("vini");
-      //var qs = window.GetQueryString(query);
+      const CACHE_KEY = "aquasense:lastSnapshot";
 
-      //var x = window.getParameterByName('foo');
+      function saveSnapshot(tanks) {
+        try {
+          localStorage.setItem(
+            CACHE_KEY,
+            JSON.stringify({ savedAt: Date.now(), tanks: tanks })
+          );
+        } catch (e) {
+          /* storage full or blocked: ignore */
+        }
+      }
 
-      /* function getParameterByName(name) {
-     
-        var match = RegExp('[?]' + foo + '=')
-                        .exec(window.location.search);
-     
-        return match ?
-            decodeURIComponent(match[1].replace(/+/g, ' '))
-            : null;
-     
-    }*/
+      function loadSnapshot() {
+        try {
+          const raw = localStorage.getItem(CACHE_KEY);
+          return raw ? JSON.parse(raw) : null;
+        } catch (e) {
+          return null;
+        }
+      }
+
+      function showCachedBanner(savedAt) {
+        const el = document.getElementById("cache-banner");
+        if (el) {
+          el.textContent =
+            "Offline: showing cached data from " +
+            new Date(savedAt).toLocaleString();
+          el.hidden = false;
+        }
+      }
+
+      function hideCachedBanner() {
+        const el = document.getElementById("cache-banner");
+        if (el) {
+          el.hidden = true;
+        }
+      }
+
+      function sanitizeLevel(val) {
+        var n = Number(val);
+        if (isNaN(n) || val === null || val === "" || val === undefined) {
+          return null;
+        }
+        return Math.max(0, Math.min(100, Math.round(n)));
+      }
+
+      var tanksInitialized = false;
+
+      function renderTanks(tanks) {
+        if (!tanks) return;
+
+        var t1 = sanitizeLevel(tanks.tank1 !== undefined ? tanks.tank1 : (tanks[0] ? tanks[0].value : null));
+        var t2 = sanitizeLevel(tanks.tank2 !== undefined ? tanks.tank2 : (tanks[1] ? tanks[1].value : null));
+        var t3 = sanitizeLevel(tanks.tank3 !== undefined ? tanks.tank3 : (tanks[2] ? tanks[2].value : null));
+        var t4 = sanitizeLevel(tanks.tank4 !== undefined ? tanks.tank4 : (tanks[3] ? tanks[3].value : null));
+
+        if (!tanksInitialized) {
+          $(".tank1").createWaterBall({ targetRange: t1 !== null ? t1 : 0 });
+          $(".tank2").createWaterBall({ targetRange: t2 !== null ? t2 : 0 });
+          $(".tank3").createWaterBall({ targetRange: t3 !== null ? t3 : 0 });
+          $(".tank4").createWaterBall({ targetRange: t4 !== null ? t4 : 0 });
+          tanksInitialized = true;
+        } else {
+          if (t1 !== null) $(".tank1").createWaterBall("updateRange", t1);
+          if (t2 !== null) $(".tank2").createWaterBall("updateRange", t2);
+          if (t3 !== null) $(".tank3").createWaterBall("updateRange", t3);
+          if (t4 !== null) $(".tank4").createWaterBall("updateRange", t4);
+        }
+      }
 
       function getQueryStringValue(key) {
         return decodeURIComponent(
@@ -155,21 +215,87 @@
           )
         );
       }
-      var x = getQueryStringValue("tank1");
-      var y = getQueryStringValue("tank2");
-      var z = getQueryStringValue("tank3");
-      var w = getQueryStringValue("tank4");
-      $(".tank1").createWaterBall({
-        targetRange: x
+
+      const cached = loadSnapshot();
+      if (cached && cached.tanks) {
+        renderTanks(cached.tanks);
+        showCachedBanner(cached.savedAt);
+      } else {
+        renderTanks({ tank1: 0, tank2: 0, tank3: 0, tank4: 0 });
+      }
+
+      function onLiveData(tanks) {
+        renderTanks(tanks);
+        saveSnapshot(tanks);
+        hideCachedBanner();
+      }
+
+      var q1 = getQueryStringValue("tank1");
+      var q2 = getQueryStringValue("tank2");
+      var q3 = getQueryStringValue("tank3");
+      var q4 = getQueryStringValue("tank4");
+
+      if (q1 || q2 || q3 || q4) {
+        onLiveData({
+          tank1: q1 || 0,
+          tank2: q2 || 0,
+          tank3: q3 || 0,
+          tank4: q4 || 0
+        });
+      } else {
+        if (navigator.onLine) {
+          fetch("data.json")
+            .then(function(res) {
+              if (!res.ok) throw new Error("Network response not ok");
+              return res.json();
+            })
+            .then(function(data) {
+              if (Array.isArray(data)) {
+                var liveTanks = {
+                  tank1: data[0] ? data[0].value : 0,
+                  tank2: data[1] ? data[1].value : 0,
+                  tank3: data[2] ? data[2].value : 0,
+                  tank4: data[3] ? data[3].value : 0
+                };
+                onLiveData(liveTanks);
+              }
+            })
+            .catch(function(err) {
+              console.warn("Live fetch pending or offline, relying on cache:", err);
+              const c = loadSnapshot();
+              if (c && c.tanks) {
+                renderTanks(c.tanks);
+                showCachedBanner(c.savedAt);
+              }
+            });
+        }
+      }
+
+      window.addEventListener("offline", function() {
+        const c = loadSnapshot();
+        if (c && c.tanks) {
+          renderTanks(c.tanks);
+          showCachedBanner(c.savedAt);
+        }
       });
-      $(".tank2").createWaterBall({
-        targetRange: y
-      });
-      $(".tank3").createWaterBall({
-        targetRange: z
-      });
-      $(".tank4").createWaterBall({
-        targetRange: w
+
+      window.addEventListener("online", function() {
+        fetch("data.json")
+          .then(function(res) {
+            if (!res.ok) throw new Error("Network response not ok");
+            return res.json();
+          })
+          .then(function(data) {
+            if (Array.isArray(data)) {
+              onLiveData({
+                tank1: data[0] ? data[0].value : 0,
+                tank2: data[1] ? data[1].value : 0,
+                tank3: data[2] ? data[2].value : 0,
+                tank4: data[3] ? data[3].value : 0
+              });
+            }
+          })
+          .catch(function() {});
       });
 
       var loadingEle = $(".loading");
