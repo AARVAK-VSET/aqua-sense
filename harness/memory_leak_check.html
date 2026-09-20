@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AquaSense Memory Leak Check</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+
+        iframe {
+            width: 100%;
+            height: 700px;
+            border: 1px solid #ccc;
+        }
+
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+
+<body>
+
+<h1>AquaSense Memory Leak Check</h1>
+
+<div id="result">Starting test...</div>
+
+<iframe
+    id="dashboard"
+    src="../src/home.html?tank1=50&tank2=60&tank3=70&tank4=80">
+</iframe>
+
+<script>
+
+const result = document.getElementById("result");
+const dashboard = document.getElementById("dashboard");
+
+function nextFrame() {
+    return new Promise(resolve => {
+        requestAnimationFrame(resolve);
+    });
+}
+
+async function getHeapSize() {
+
+    if (performance.memory) {
+        return performance.memory.usedJSHeapSize;
+    }
+
+    if (performance.measureUserAgentSpecificMemory) {
+        const result =
+            await performance.measureUserAgentSpecificMemory();
+
+        return result.bytes;
+    }
+
+    throw new Error(
+        "This browser does not expose a supported JS heap measurement API."
+    );
+}
+
+async function runTest() {
+
+    result.textContent =
+        "Waiting for dashboard to initialize...";
+
+    await new Promise(resolve => {
+        dashboard.addEventListener("load", resolve, { once: true });
+    });
+
+    /*
+     * Allow the dashboard animation to initialize.
+     */
+    for (let i = 0; i < 10; i++) {
+        await nextFrame();
+    }
+
+    if (window.gc) {
+        window.gc();
+    }
+
+    const before = await getHeapSize();
+
+    result.textContent =
+        "Running 300 animation frames...";
+
+    for (let i = 0; i < 300; i++) {
+        await nextFrame();
+    }
+
+    if (window.gc) {
+        window.gc();
+    }
+
+    const after = await getHeapSize();
+
+    const delta = after - before;
+    const deltaKB = delta / 1024;
+
+    const passed = delta < 500 * 1024;
+
+    result.textContent =
+        "AquaSense Memory Leak Check\n\n" +
+        `Frames: 300\n` +
+        `Heap before: ${before.toLocaleString()} bytes\n` +
+        `Heap after:  ${after.toLocaleString()} bytes\n` +
+        `Heap delta:  ${delta.toLocaleString()} bytes\n` +
+        `Heap delta:  ${deltaKB.toFixed(2)} KB\n\n` +
+        (passed
+            ? "PASS: Heap delta is below 500 KB."
+            : "FAIL: Heap delta is 500 KB or greater.");
+
+    console.log({
+        frames: 300,
+        before,
+        after,
+        delta,
+        deltaKB,
+        passed
+    });
+}
+
+runTest().catch(error => {
+
+    result.textContent =
+        "TEST ERROR\n\n" +
+        error.message;
+
+    console.error(error);
+
+});
+
+</script>
+
+</body>
+</html>
