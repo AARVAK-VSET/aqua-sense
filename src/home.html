@@ -49,11 +49,17 @@
         text-align: center;
         font-weight: 800;
       }
+
+      #cache-banner {
+        margin-bottom: 20px;
+        font-weight: 600;
+      }
     </style>
   </head>
 
   <body>
     <div class="container">
+      <div id="cache-banner" class="alert alert-info text-center" hidden></div>
       <center>
         <h1 class="title">AquaSense</h1>
         <p>
@@ -217,8 +223,24 @@
       $(".tank3").createWaterBall({
         targetRange: z
       });
-      $(".tank4").createWaterBall({
-        targetRange: w
+
+      window.addEventListener("online", function() {
+        fetch("data.json")
+          .then(function(res) {
+            if (!res.ok) throw new Error("Network response not ok");
+            return res.json();
+          })
+          .then(function(data) {
+            if (Array.isArray(data)) {
+              onLiveData({
+                tank1: data[0] ? data[0].value : 0,
+                tank2: data[1] ? data[1].value : 0,
+                tank3: data[2] ? data[2].value : 0,
+                tank4: data[3] ? data[3].value : 0
+              });
+            }
+          })
+          .catch(function() {});
       });
 
       var loadingEle = $(".loading");
