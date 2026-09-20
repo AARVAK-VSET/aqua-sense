@@ -36,10 +36,13 @@ class TelemetryManager {
    */
   constructor(options = {}) {
     this.threshold = typeof options.threshold === 'number' ? options.threshold : 20;
-    this.autoRegister = Boolean(options.autoRegister);
+    this.autoRegister = options.autoRegister !== false;
     this.tanks = new Map();
     this.alarmTriggerCount = 0;
     this.listeners = new Set();
+    if (typeof options.onAlarm === 'function') {
+      this.onAlarmTrigger((p) => options.onAlarm(p.tankId, p.level));
+    }
   }
 
   /**
@@ -188,6 +191,10 @@ class TelemetryManager {
    * Returns the total count of logical alarms triggered since instantiation or reset.
    * @returns {number}
    */
+  get alarmCount() { return this.alarmTriggerCount; }
+  set alarmCount(val) { this.alarmTriggerCount = val; }
+  update(tankId, rawLevel) { return this.updateTank(tankId, rawLevel); }
+
   getAlarmTriggerCount() {
     return this.alarmTriggerCount;
   }

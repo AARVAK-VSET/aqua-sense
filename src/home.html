@@ -123,6 +123,7 @@
 
     <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
     <script type="text/javascript" src="lib/createWaterBall-jquery.js"></script>
+    <script type="text/javascript" src="lib/telemetry-manager.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
     <script>
       //var x=30;
@@ -155,10 +156,45 @@
           )
         );
       }
+      var telemetryManager = new TelemetryManager({ threshold: 20 });
+      window.manager = telemetryManager;
+
+      function playAlarmAudio(tankId) {
+        try {
+          var AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (!AudioCtx) return;
+          var ctx = new AudioCtx();
+          var osc = ctx.createOscillator();
+          var gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(440, ctx.currentTime);
+          gain.gain.setValueAtTime(0.1, ctx.currentTime);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.2);
+        } catch (e) {
+          console.warn("Audio alarm playback error:", e);
+        }
+      }
+
+      telemetryManager.onAlarmTrigger(function(alert) {
+        playAlarmAudio(alert.tankId);
+      });
+
       var x = getQueryStringValue("tank1");
       var y = getQueryStringValue("tank2");
       var z = getQueryStringValue("tank3");
       var w = getQueryStringValue("tank4");
+
+      var lvlX = TelemetryManager.normalizeLevel(x);
+      var lvlY = TelemetryManager.normalizeLevel(y);
+      var lvlZ = TelemetryManager.normalizeLevel(z);
+      var lvlW = TelemetryManager.normalizeLevel(w);
+      if (lvlX !== null) telemetryManager.update("tank1", lvlX);
+      if (lvlY !== null) telemetryManager.update("tank2", lvlY);
+      if (lvlZ !== null) telemetryManager.update("tank3", lvlZ);
+      if (lvlW !== null) telemetryManager.update("tank4", lvlW);
       $(".tank1").createWaterBall({
         targetRange: x
       });
