@@ -1,29 +1,593 @@
 <!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Concurrency check</title></head>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AquaSense — Multi-Tank Telemetry Concurrency Test Harness (#21)</title>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card-bg: #161b22;
+      --border: #30363d;
+      --text: #c9d1d9;
+      --text-muted: #8b949e;
+      --pass: #238636;
+      --pass-bg: #0e2e18;
+      --fail: #da3633;
+      --fail-bg: #3c1618;
+      --blue: #58a6ff;
+      --accent: #f0883e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 32px 20px;
+    }
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    header {
+      margin-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 16px;
+    }
+    h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-family: monospace;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+      background: #21262d;
+      border: 1px solid var(--border);
+      color: var(--blue);
+    }
+    .lead {
+      color: var(--text-muted);
+      font-size: 13px;
+      margin-top: 6px;
+    }
+    .summary-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .status-banner {
+      font-size: 16px;
+      font-weight: 700;
+      padding: 10px 18px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .status-banner.pass {
+      background: var(--pass-bg);
+      border: 1px solid var(--pass);
+      color: #3fb950;
+    }
+    .status-banner.fail {
+      background: var(--fail-bg);
+      border: 1px solid var(--fail);
+      color: #f85149;
+    }
+    .btn {
+      background: #21262d;
+      border: 1px solid var(--border);
+      color: #c9d1d9;
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn:hover {
+      background: #30363d;
+      color: #ffffff;
+    }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .metric-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 14px;
+    }
+    .metric-card .label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .metric-card .value {
+      font-size: 20px;
+      font-weight: 700;
+      font-family: monospace;
+      color: #ffffff;
+    }
+    .section-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: #ffffff;
+      margin: 24px 0 12px 0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .test-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 32px;
+    }
+    .test-item {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 13px;
+    }
+    .test-item.pass { border-left: 4px solid #3fb950; }
+    .test-item.fail { border-left: 4px solid #f85149; }
+    .test-info { display: flex; flex-direction: column; gap: 2px; }
+    .test-name { font-weight: 600; color: #ffffff; }
+    .test-desc { font-size: 12px; color: var(--text-muted); }
+    .test-result { font-family: monospace; font-weight: 700; font-size: 12px; padding: 3px 8px; border-radius: 4px; }
+    .test-result.pass { background: var(--pass-bg); color: #3fb950; }
+    .test-result.fail { background: var(--fail-bg); color: #f85149; }
+    table.log-table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+      font-size: 12px;
+      font-family: monospace;
+    }
+    table.log-table th, table.log-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+    }
+    table.log-table th {
+      background: #1c2128;
+      color: var(--text-muted);
+      font-weight: 600;
+      font-size: 11px;
+    }
+    .alarm-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 11px;
+    }
+    .alarm-yes { background: #3c1618; color: #f85149; border: 1px solid #da3633; }
+    .alarm-no { color: var(--text-muted); }
+  </style>
+  <script src="../src/lib/telemetry-manager.js"></script>
+</head>
 <body>
-<h1>Alarm concurrency check</h1>
-<pre id="result">Running...</pre>
-<script src="../src/lib/telemetry-manager.js"></script>
-<script>
-  const TANKS = ['tank-1', 'tank-2', 'tank-3', 'tank-4'];
-  const EVENTS = 10;
-  let audioCalls = 0;
-  const manager = new TelemetryManager({ onAlarm: () => { audioCalls++; } });
+  <div class="container">
+    <header>
+      <h1>
+        AquaSense Concurrency Test Harness
+        <span class="badge">Issue #21</span>
+      </h1>
+      <p class="lead">
+        Deterministic Multi-Tank Telemetry Invariant Verification & Race Condition Prevention Suite
+      </p>
+    </header>
 
-  let done = 0;
-  for (let i = 0; i < EVENTS; i++) {
-    setTimeout(() => {
-      manager.update(TANKS[i % TANKS.length], 15);   // 15% is below the 20% threshold
-      if (++done === EVENTS) report();
-    }, 0);
-  }
+    <div class="summary-card">
+      <div>
+        <div id="statusBanner" class="status-banner">Running tests...</div>
+        <div id="statusDetails" style="font-size: 12px; color: var(--text-muted); margin-top: 6px;"></div>
+      </div>
+      <button id="rerunBtn" class="btn" onclick="runAllSuites()">Re-run Test Suite</button>
+    </div>
 
-  function report() {
-    const pass = manager.alarmCount === 4 && audioCalls === 4;
-    document.getElementById('result').textContent =
-      (pass ? 'PASS' : 'FAIL') + ' - alarm triggers: ' + manager.alarmCount + ' (expected 4)';
-  }
-</script>
+    <div class="metrics">
+      <div class="metric-card">
+        <div class="label">Primary Burst Events</div>
+        <div class="value" id="metricEvents">10</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Tanks Involved</div>
+        <div class="value" id="metricTanks">4</div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Actual Alarms Counted</div>
+        <div class="value" id="metricAlarms" data-testid="alarm-trigger-count"><span id="alarmTriggerCount">-</span></div>
+      </div>
+      <div class="metric-card">
+        <div class="label">Expected Alarms</div>
+        <div class="value" id="metricExpected">4</div>
+      </div>
+    </div>
+
+    <div class="section-title">
+      <span>Automated Regression Matrix (10 Suites)</span>
+      <span id="suiteProgress" style="font-size: 12px; font-weight: normal; color: var(--text-muted);"></span>
+    </div>
+    <div id="testList" class="test-list"></div>
+
+    <div class="section-title">
+      <span>Primary Concurrency Burst Event Log (Issue #21)</span>
+      <span style="font-size: 11px; font-weight: normal; color: var(--text-muted);">Fired across 4 tanks via setTimeout(..., 0)</span>
+    </div>
+    <table class="log-table" id="eventLogTable">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Tank</th>
+          <th>Level</th>
+          <th>Transition</th>
+          <th>Result Action</th>
+        </tr>
+      </thead>
+      <tbody id="eventLogBody"></tbody>
+    </table>
+  </div>
+
+  <script>
+    // Global result storage for headless automated runners / CI scripts
+    window.__HARNESS_RESULTS__ = {
+      passed: false,
+      primaryCount: 0,
+      expectedCount: 4,
+      totalSuites: 10,
+      passedSuites: 0,
+      results: []
+    };
+
+    function recordSuite(name, description, pass, details) {
+      window.__HARNESS_RESULTS__.results.push({ name, description, pass, details });
+      if (pass) window.__HARNESS_RESULTS__.passedSuites++;
+
+      const list = document.getElementById("testList");
+      const item = document.createElement("div");
+      item.className = "test-item " + (pass ? "pass" : "fail");
+      item.innerHTML = `
+        <div class="test-info">
+          <div class="test-name">${name}</div>
+          <div class="test-desc">${description} &bull; <span style="font-family: monospace;">${details}</span></div>
+        </div>
+        <div class="test-result ${pass ? 'pass' : 'fail'}">${pass ? 'PASSED' : 'FAILED'}</div>
+      `;
+      list.appendChild(item);
+    }
+
+    async function runAllSuites() {
+      const list = document.getElementById("testList");
+      const tbody = document.getElementById("eventLogBody");
+      list.innerHTML = "";
+      tbody.innerHTML = "";
+      window.__HARNESS_RESULTS__.results = [];
+      window.__HARNESS_RESULTS__.passedSuites = 0;
+
+      document.getElementById("statusBanner").className = "status-banner";
+      document.getElementById("statusBanner").textContent = "Running test suites...";
+      document.getElementById("statusDetails").textContent = "";
+
+      // ──────────────────────────────────────────────────────────────────────────
+      // TEST 1 (PRIMARY): Issue #21 Requirement
+      // 10 simultaneous synthetic threshold-crossing events across 4 tanks using setTimeout(..., 0)
+      // Asserts alarmTriggerCount === 4 (one per tank), not 10.
+      // ──────────────────────────────────────────────────────────────────────────
+      const tm1 = new TelemetryManager({ threshold: 20 });
+      let instrumentedCounter = 0;
+      tm1.onAlarmTrigger(() => {
+        instrumentedCounter++;
+      });
+      tm1.registerTank("tank1", 100);
+      tm1.registerTank("tank2", 100);
+      tm1.registerTank("tank3", 100);
+      tm1.registerTank("tank4", 100);
+
+      const events = [
+        { tank: "tank1", level: 18 },
+        { tank: "tank1", level: 15 },
+        { tank: "tank1", level: 12 },
+        { tank: "tank2", level: 19 },
+        { tank: "tank2", level: 10 },
+        { tank: "tank3", level: 14 },
+        { tank: "tank3", level: 8 },
+        { tank: "tank3", level: 5 },
+        { tank: "tank4", level: 16 },
+        { tank: "tank4", level: 11 }
+      ];
+
+      const logEntries = [];
+
+      await new Promise((resolve) => {
+        let completed = 0;
+        events.forEach((ev, idx) => {
+          setTimeout(() => {
+            const res = tm1.updateTank(ev.tank, ev.level);
+            logEntries.push({
+              index: idx + 1,
+              tank: ev.tank,
+              level: ev.level,
+              from: res.previousState,
+              to: res.state,
+              alarm: res.alarmTriggered
+            });
+            completed++;
+            if (completed === events.length) {
+              resolve();
+            }
+          }, 0);
+        });
+      });
+
+      const actualAlarms = tm1.getAlarmTriggerCount();
+      const test1Pass = (actualAlarms === 4 && instrumentedCounter === 4);
+      window.__HARNESS_RESULTS__.primaryCount = actualAlarms;
+      window.alarmTriggerCount = actualAlarms;
+      window.totalAlarmTriggerCount = actualAlarms;
+      window.instrumentedCounter = instrumentedCounter;
+
+      const metricElem = document.getElementById("metricAlarms");
+      if (metricElem) metricElem.textContent = actualAlarms;
+      const countElem = document.getElementById("alarmTriggerCount");
+      if (countElem) countElem.textContent = actualAlarms;
+      recordSuite(
+        "Suite 1: Issue #21 Primary Concurrent Burst",
+        "10 simultaneous events across 4 tanks via setTimeout(..., 0)",
+        test1Pass,
+        `Expected 4 alarms, got ${actualAlarms}`
+      );
+
+      console.assert(test1Pass, `[Assertion Failed] Expected 4 alarms, got ${actualAlarms}`);
+
+      // Populate Diagnostic Event Log
+      logEntries.forEach((entry) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${entry.index}</td>
+          <td><strong>${entry.tank}</strong></td>
+          <td>${entry.level}%</td>
+          <td>${entry.from} &rarr; ${entry.to}</td>
+          <td>${entry.alarm ? '<span class="alarm-badge alarm-yes">🚨 ALARM DISPATCHED</span>' : '<span class="alarm-badge alarm-no">&mdash; IGNORED (in episode)</span>'}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // ──────────────────────────────────────────────────────────────────────────
+      // TEST 2: Repeated Critical Readings in a Single Tank Episode
+      // Sequential readings below 20%: 19, 18, 17, 5 -> exactly 1 alarm
+      // ──────────────────────────────────────────────────────────────────────────
+      const tm2 = new TelemetryManager({ threshold: 20 });
+      tm2.registerTank("tank1", 100);
+      tm2.updateTank("tank1", 19);
+      tm2.updateTank("tank1", 18);
+      tm2.updateTank("tank1", 17);
+      tm2.updateTank("tank1", 5);
+      const test2Pass = tm2.getAlarmTriggerCount() === 1;
+      recordSuite(
+        "Suite 2: Consecutive Critical Suppression",
+        "Multiple consecutive updates < 20% on single tank",
+        test2Pass,
+        `Expected 1 alarm, got ${tm2.getAlarmTriggerCount()}`
+      );
+
+      // ──────────────────────────────────────────────────────────────────────────
+      // TEST 3: Recovery & Re-entry Lifecycle
+      // 19 (ALARM) -> 30 (RECOVER) -> 15 (ALARM) -> exactly 2 alarms
+      // ──────────────────────────────────────────────────────────────────────────
+      const tm3 = new TelemetryManager({ threshold: 20 });
+      tm3.registerTank("tank1", 100);
+      tm3.updateTank("tank1", 19); // Alarm 1
+      tm3.updateTank("tank1", 30); // Recover to NORMAL
+      tm3.updateTank("tank1", 15); // Alarm 2
+      const test3Pass = tm3.getAlarmTriggerCount() === 2;
+      recordSuite(
+        "Suite 3: Recovery & Re-entry Lifecycle",
+        "19% (alarm) -> 30% (recover) -> 15% (new alarm)",
+        test3Pass,
+        `Expected 2 alarms, got ${tm3.getAlarmTriggerCount()}`
+      );
+
+      // ──────────────────────────────────────────────────────────────────────────
+      // TEST 4: Strict Boundary Check (< 20, not <= 20)
+      // 20 is NORMAL, 19.999 is CRITICAL
+      // ──────────────────────────────────────────────────────────────────────────
+      const tm4 = new TelemetryManager({ threshold: 20 });
+      tm4.registerTank("tank1", 100);
+      const r20 = tm4.updateTank("tank1", 20); // must be NORMAL, no alarm
+      const alarmsAt20 = tm4.getAlarmTriggerCount();
+      const r19 = tm4.updateTank("tank1", 19.999); // must be CRITICAL, alarm
+      const alarmsAt19 = tm4.getAlarmTriggerCount();
+      const test4Pass = (r20.state === "NORMAL" && alarmsAt20 === 0 && r19.state === "CRITICAL" && alarmsAt19 === 1);
+      recordSuite(
+        "Suite 4: Strict Threshold Boundary (< 20)",
+        "20.00 is NORMAL (0 alarms), 19.999 is CRITICAL (1 alarm)",
+        test4Pass,
+        `Level 20: ${r20.state}, Level 19.999: ${r19.state}`
+      );
+
+      // ──────────────────────────────────────────────────────────────────────────
+      // TEST 5: Recovery Boundary Verification (19 -> 20 -> 19)
+      // Level 20 must successfully reset state machine so dropping to 19 triggers 2nd alarm
+      // ──────────────────────────────────────────────────────────────────────────
+      const tm5 = new TelemetryManager({ threshold: 20 });
+      tm5.registerTank("tank1", 100);
+      tm5.updateTank("tank1", 19); // Alarm 1
+      const resRecovery = tm5.updateTank("tank1", 20); // Recover to NORMAL
+      tm5.updateTank("tank1", 19); // Alarm 2
+      const test5Pass = (resRecovery.state === "NORMAL" && tm5.getAlarmTriggerCount() === 2);
+      recordSuite(
+        "Suite 5: Recovery Boundary at Exactly 20%",
+        "19% -> 20% (recovery to NORMAL) -> 19% (second alarm)",
+        test5Pass,
+        `State at 20%: ${resRecovery.state}, Total alarms: ${tm5.getAlarmTriggerCount()}`
+      );
+
+      // ──────────────────────────────────────────────────────────────────────────
+      // TEST 6: Defensive Telemetry Input Validation & Normalization Boundary
+      // null, undefined, "", "abc", NaN, Infinity rejected without alarms.
+      // Numeric string "18" safely normalized and processed without Number(null)->0 pitfall.
+      // ──────────────────────────────────────────────────────────────────────────
+      const tm6 = new TelemetryManager({ threshold: 20 });
+      tm6.registerTank("tank1", 100);
+      const r1 = tm6.updateTank("tank1", undefined);
+      const r2 = tm6.updateTank("tank1", null);      // CRITICAL: Must NOT coerce to 0!
+      const r3 = tm6.updateTank("tank1", "");        // CRITICAL: Must NOT coerce to 0!
+      const r4 = tm6.updateTank("tank1", NaN);
+      const r5 = tm6.updateTank("tank1", "critical");
+      const r6 = tm6.updateTank("tank1", Infinity);
+      const invalidPass = (!r1.accepted && !r2.accepted && !r3.accepted && !r4.accepted && !r5.accepted && !r6.accepted && tm6.getAlarmTriggerCount() === 0);
+
+      // Test valid numeric string normalization boundary
+      const rStrNum = tm6.updateTank("tank1", "18"); // Valid string number, should normalize to 18 and trigger alarm
+      const strPass = (rStrNum.accepted && rStrNum.level === 18 && tm6.getAlarmTriggerCount() === 1);
+
+      const test6Pass = (invalidPass && strPass);
+      recordSuite(
+        "Suite 6: Defensive Telemetry Normalization Boundary",
+        'Rejects null, undefined, empty string, NaN, Infinity (0 alarms); normalizes "18" safely',
+        test6Pass,
+        `Rejections: ${invalidPass ? "PASS" : "FAIL"} | String "18" normalization: ${strPass ? "PASS" : "FAIL"}`
+      );
+
+      // ──────────────────────────────────────────────────────────────────────────
+      // TEST 7: Multi-Tank State Isolation
+      // tank1: 15 (crit), tank2: 45 (norm), tank3: 10 (crit), tank4: 80 (norm) -> exactly 2 alarms
+      // ──────────────────────────────────────────────────────────────────────────
+      const tm7 = new TelemetryManager({ threshold: 20 });
+      tm7.registerTank("tank1", 100);
+      tm7.registerTank("tank2", 100);
+      tm7.registerTank("tank3", 100);
+      tm7.registerTank("tank4", 100);
+      tm7.updateTank("tank1", 15);
+      tm7.updateTank("tank2", 45);
+      tm7.updateTank("tank3", 10);
+      tm7.updateTank("tank4", 80);
+      const test7Pass = (
+        tm7.getTankState("tank1").state === "CRITICAL" &&
+        tm7.getTankState("tank2").state === "NORMAL" &&
+        tm7.getTankState("tank3").state === "CRITICAL" &&
+        tm7.getTankState("tank4").state === "NORMAL" &&
+        tm7.getAlarmTriggerCount() === 2
+      );
+      recordSuite(
+        "Suite 7: Multi-Tank State Isolation",
+        "Independent states across tanks without cross-channel leak",
+        test7Pass,
+        `tank1: CRIT, tank2: NORM, tank3: CRIT, tank4: NORM (2 alarms)`
+      );
+
+      // ──────────────────────────────────────────────────────────────────────────
+      // TEST 8: Idempotent Registration Guard
+      // Re-registering active critical tank preserves state and does not reset to NORMAL
+      // ──────────────────────────────────────────────────────────────────────────
+      const tm8 = new TelemetryManager({ threshold: 20 });
+      tm8.registerTank("tank1", 100);
+      tm8.updateTank("tank1", 14); // Critical, Alarm 1
+      tm8.registerTank("tank1", 100); // Idempotent registration attempt
+      const stateAfterReReg = tm8.getTankState("tank1");
+      tm8.updateTank("tank1", 12); // Should remain in critical episode (no second alarm)
+      const test8Pass = (stateAfterReReg.state === "CRITICAL" && stateAfterReReg.level === 14 && tm8.getAlarmTriggerCount() === 1);
+      recordSuite(
+        "Suite 8: Idempotent Registration Guard",
+        "Re-registration preserves active CRITICAL state without reset",
+        test8Pass,
+        `Preserved state: ${stateAfterReReg.state}, Alarms: ${tm8.getAlarmTriggerCount()}`
+      );
+
+      // ──────────────────────────────────────────────────────────────────────────
+      // TEST 9: Unknown Tank Guard
+      // Unregistered tank ID rejected with UNKNOWN_TANK, 0 alarms
+      // ──────────────────────────────────────────────────────────────────────────
+      const tm9 = new TelemetryManager({ threshold: 20, autoRegister: false });
+      const unkRes = tm9.updateTank("tank99", 15);
+      const test9Pass = (!unkRes.accepted && unkRes.reason === "UNKNOWN_TANK" && tm9.getAlarmTriggerCount() === 0);
+      recordSuite(
+        "Suite 9: Unknown Tank Guard",
+        "Rejects updates to unregistered tanks when autoRegister=false",
+        test9Pass,
+        `Result: ${unkRes.reason}, Alarms: ${tm9.getAlarmTriggerCount()}`
+      );
+
+      // ──────────────────────────────────────────────────────────────────────────
+      // TEST 10: Listener Resilience & Isolation
+      // Faulty throwing listener does not crash manager or block other listeners
+      // ──────────────────────────────────────────────────────────────────────────
+      const tm10 = new TelemetryManager({ threshold: 20 });
+      tm10.registerTank("tank1", 100);
+      let secondListenerRan = false;
+      tm10.onAlarmTrigger(() => {
+        throw new Error("Simulated faulty listener crash");
+      });
+      tm10.onAlarmTrigger(() => {
+        secondListenerRan = true;
+      });
+      let updateThrew = false;
+      try {
+        tm10.updateTank("tank1", 15);
+      } catch (e) {
+        updateThrew = true;
+      }
+      const test10Pass = (!updateThrew && secondListenerRan && tm10.getAlarmTriggerCount() === 1);
+      recordSuite(
+        "Suite 10: Listener Resilience & Isolation",
+        "Faulty listener exception safely trapped; other listeners executed",
+        test10Pass,
+        `Manager did not throw, second listener executed: ${secondListenerRan}`
+      );
+
+      // ──────────────────────────────────────────────────────────────────────────
+      // Final Summary
+      // ──────────────────────────────────────────────────────────────────────────
+      const allPassed = (window.__HARNESS_RESULTS__.passedSuites === window.__HARNESS_RESULTS__.totalSuites);
+      window.__HARNESS_RESULTS__.passed = allPassed;
+
+      const banner = document.getElementById("statusBanner");
+      const details = document.getElementById("statusDetails");
+      document.getElementById("suiteProgress").textContent = `${window.__HARNESS_RESULTS__.passedSuites} / ${window.__HARNESS_RESULTS__.totalSuites} Passed`;
+
+      if (allPassed) {
+        banner.className = "status-banner pass";
+        banner.textContent = "✓ ALL 10 TEST SUITES PASSED";
+        details.textContent = "Issue #21 Invariant Verified: 10 concurrent synthetic events across 4 tanks emitted exactly 4 alarms. Per-tank FSM transitions are 100% deterministic.";
+      } else {
+        banner.className = "status-banner fail";
+        banner.textContent = "✗ SOME SUITES FAILED";
+        details.textContent = `Passed ${window.__HARNESS_RESULTS__.passedSuites} of ${window.__HARNESS_RESULTS__.totalSuites} suites. Check details below.`;
+      }
+    }
+
+    window.addEventListener("DOMContentLoaded", runAllSuites);
+  </script>
 </body>
 </html>
