@@ -45,7 +45,7 @@ int readUltrasonicLevelPercent()
 
 void setup()
 {
-  Serial.begin(11520);
+  Serial.begin(115200);
 
   pinMode(trigPin, OUTPUT);
   pinMode(echoPin, INPUT);
