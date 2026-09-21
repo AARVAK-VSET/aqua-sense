@@ -49,7 +49,9 @@ aqua-sense/
 ├── LICENSE
 └── README.md
 ```
+## 📸 Dashboard Preview
 
+![Dashboard UI Preview](screenshots/Screenshot%202019-12-31%20at%209.06.14%20PM.png)
 ---
 
 ## ⚡ Running the Web Dashboard Locally
