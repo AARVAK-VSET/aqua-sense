@@ -17,21 +17,35 @@
 
 		ctx.beginPath();
 
-		var w_sX = config.wave_config.sX,
+				var w_sX = config.wave_config.sX,
 			w_waveWidth = config.wave_config.waveWidth,
 			w_waveHeight = config.wave_config.waveHeight,
 			w_axisLength = config.wave_config.axisLength,
 			c_width = config.cvs_config.width,
 			c_height = config.cvs_config.height;
 
+		// circle geometry (same values used for the clip above)
+		var cx = config.circle_config.r,
+			cy = config.circle_config.r,
+			R  = config.circle_config.cR - 5;
+
+		// clamp level and taper amplitude: max at 50%, zero at 0% and 100%
+		var level = Math.max(0, Math.min(100, config.nowRange));
+		var amp = w_waveHeight * Math.sin(Math.PI * level / 100);
+		var dY = c_height * (1 - level / 100);
+
 		for(var x = w_sX;x < w_sX + w_axisLength;x += 20 / w_axisLength) {
 
 			var y = -Math.sin((w_sX + x) * w_waveWidth + xOffset);
+			var py = dY + y * amp;
 
-			var dY = c_height * (1 - config.nowRange / 100 );
+			// keep the point inside the circle at this x
+			var dx = x - cx;
+			var half = Math.sqrt(Math.max(0, R * R - dx * dx));
+			py = Math.max(cy - half, Math.min(cy + half, py));
 
-			points.push([x, dY + y * w_waveHeight]);
-			ctx.lineTo(x, dY + y * w_waveHeight);  
+			points.push([x, py]);
+			ctx.lineTo(x, py);
 		}
 		ctx.lineTo(w_axisLength,c_height);
 		ctx.lineTo(w_sX,c_height);
