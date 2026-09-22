@@ -103,6 +103,7 @@
 
     <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
     <script type="text/javascript" src="lib/createWaterBall-jquery.js"></script>
+    <script type="text/javascript" src="lib/telemetry-manager.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
     <script src="https://www.gstatic.com/firebasejs/4.3.0/firebase.js"></script>
     <script>
@@ -127,7 +128,7 @@
               apiKey: "AIzaSyCpr964V-n-y0PDZgfurtDPzuwZc040LJ8",
               authDomain: "experiment-1-98c23.firebaseapp.com",
               databaseURL: "https://experiment-1-98c23.firebaseio.com",
-              projectId: "experiment - 1 - 98c23",
+              projectId: "experiment-1-98c23",
               storageBucket: "experiment-1-98c23.appspot.com",
               messagingSenderId: "358789021543",
               appId: "1:358789021543:web:abc7e4a90e9628278d79c2"
@@ -136,6 +137,51 @@
           };
           firebase.initializeApp(config);
           var messagesRef = firebase.database().ref("waterLevel1");
+
+          // Initialize Centralized Multi-Tank Telemetry Manager (#21)
+          var telemetryManager = new TelemetryManager({ threshold: 20 });
+          telemetryManager.registerTank("tank1");
+          telemetryManager.registerTank("tank2");
+          telemetryManager.registerTank("tank3");
+          telemetryManager.registerTank("tank4");
+
+          // Shared Web Audio singleton and playback gate to eliminate overlapping audio distortion
+          var sharedAudioContext = null;
+          var isAlarmAudioPlaying = false;
+
+          function triggerWebAudioAlarm(tankId, level) {
+              if (isAlarmAudioPlaying) return; // Active alarm tone already playing
+              try {
+                  var AudioCtx = window.AudioContext || window.webkitAudioContext;
+                  if (!AudioCtx) return;
+                  sharedAudioContext = sharedAudioContext || new AudioCtx();
+                  isAlarmAudioPlaying = true;
+
+                  var osc = sharedAudioContext.createOscillator();
+                  var gain = sharedAudioContext.createGain();
+                  osc.type = "sine";
+                  osc.frequency.setValueAtTime(880, sharedAudioContext.currentTime);
+                  gain.gain.setValueAtTime(0.1, sharedAudioContext.currentTime);
+                  gain.gain.exponentialRampToValueAtTime(0.001, sharedAudioContext.currentTime + 0.5);
+
+                  osc.connect(gain);
+                  gain.connect(sharedAudioContext.destination);
+
+                  osc.onended = function () {
+                      isAlarmAudioPlaying = false;
+                  };
+
+                  osc.start();
+                  osc.stop(sharedAudioContext.currentTime + 0.5);
+              } catch (e) {
+                  isAlarmAudioPlaying = false;
+              }
+          }
+
+          telemetryManager.onAlarmTrigger(function (alert) {
+              console.warn("[AquaSense Alarm] Tank " + alert.tankId + " entered CRITICAL state at " + alert.level + "%");
+              triggerWebAudioAlarm(alert.tankId, alert.level);
+          });
 
           function getQueryStringValue(key) {
               return decodeURIComponent(
@@ -152,6 +198,10 @@
           }
           var x = firebase.database().ref('WaterLevel1/').on('value', function (snapshot) {
               x = snapshot.val();
+              var lvl = TelemetryManager.normalizeLevel(x);
+              if (lvl !== null) {
+                  telemetryManager.updateTank("tank1", lvl);
+              }
               $(".tank1").createWaterBall({
                   targetRange: x
               });
@@ -191,6 +241,10 @@
 
           var y = firebase.database().ref('WaterLevel2/').on('value', function (snapshot) {
               y = snapshot.val();
+              var lvl = TelemetryManager.normalizeLevel(y);
+              if (lvl !== null) {
+                  telemetryManager.updateTank("tank2", lvl);
+              }
               $(".tank2").createWaterBall({
                   targetRange: y
               });
@@ -229,6 +283,10 @@
           });
           var z = firebase.database().ref('WaterLevel3/').on('value', function (snapshot) {
               z = snapshot.val();
+              var lvl = TelemetryManager.normalizeLevel(z);
+              if (lvl !== null) {
+                  telemetryManager.updateTank("tank3", lvl);
+              }
               $(".tank3").createWaterBall({
                   targetRange: z
               });
@@ -268,6 +326,10 @@
 
           var w = firebase.database().ref('WaterLevel4/').on('value', function (snapshot) {
               w = snapshot.val();
+              var lvl = TelemetryManager.normalizeLevel(w);
+              if (lvl !== null) {
+                  telemetryManager.updateTank("tank4", lvl);
+              }
               $(".tank4").createWaterBall({
                   targetRange: w
               });
