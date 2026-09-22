@@ -58,11 +58,36 @@
         margin-bottom: 20px;
         font-weight: 600;
       }
+
+      #connection-status {
+        margin-bottom: 10px;
+        font-weight: 600;
+        text-align: center;
+        padding: 8px;
+        border-radius: 4px;
+      }
+
+      #connection-status.state-connecting {
+        background-color: #fff3cd;
+        color: #856404;
+      }
+
+      #connection-status.state-connected {
+        background-color: #d4edda;
+        color: #155724;
+      }
+
+      #connection-status.state-disconnected,
+      #connection-status.state-error {
+        background-color: #f8d7da;
+        color: #721c24;
+      }
     </style>
   </head>
 
   <body>
     <div class="container">
+      <div id="connection-status" role="status" aria-live="polite"></div>
       <div id="cache-banner" class="alert alert-info text-center" hidden></div>
       <center>
         <h1 class="title">AquaSense</h1>
@@ -135,8 +160,90 @@
     <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
     <script type="text/javascript" src="lib/createWaterBall-jquery.js"></script>
     <script type="text/javascript" src="lib/telemetry-manager.js"></script>
+    <script type="text/javascript" src="lib/telemetry-connection.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
     <script src="lib/telemetry-manager.js"></script>
+
+    <script>
+      // Issue #15: exponential backoff reconnect (with jitter) for the
+      // real-time telemetry stream, with connection state surfaced to the UI.
+      (function () {
+        var statusEl = document.getElementById("connection-status");
+
+        var STATE_LABELS = {
+          connecting: "Connecting to telemetry stream…",
+          connected: "Live: connected to telemetry stream",
+          disconnected: "Disconnected from telemetry stream",
+          error: "Telemetry stream error",
+        };
+
+        function renderState(state, meta) {
+          if (!statusEl) return;
+          statusEl.className = "state-" + state;
+          var label = STATE_LABELS[state] || state;
+          if (state === "disconnected" && meta) {
+            if (meta.exhausted) {
+              label += " — giving up after repeated failures (" + meta.reason + ")";
+            } else if (meta.retryInMs != null) {
+              label +=
+                " — retrying in " +
+                Math.round(meta.retryInMs / 1000) +
+                "s (" + meta.reason + ")";
+            }
+          }
+          statusEl.textContent = label;
+          statusEl.hidden = false;
+        }
+
+        var telemetryConnection = new TelemetryConnection({
+          connect: function (onOpen, onFail) {
+            var aborted = false;
+            fetch("data.json")
+              .then(function (res) {
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                return res.json();
+              })
+              .then(function (data) {
+                if (aborted) return;
+                if (typeof onLiveData === "function" && Array.isArray(data)) {
+                  onLiveData({
+                    tank1: data[0] ? data[0].value : 0,
+                    tank2: data[1] ? data[1].value : 0,
+                    tank3: data[2] ? data[2].value : 0,
+                    tank4: data[3] ? data[3].value : 0,
+                  });
+                }
+                onOpen();
+              })
+              .catch(function (err) {
+                if (!aborted) onFail(err);
+              });
+            return {
+              close: function () {
+                aborted = true;
+              },
+            };
+          },
+          onStateChange: renderState,
+          onLog: function (message, err) {
+            console.error(message, err);
+          },
+          baseDelayMs: 1000,
+          maxDelayMs: 30000,
+        });
+
+        window.telemetryConnection = telemetryConnection;
+        telemetryConnection.connect();
+
+        window.addEventListener("online", function () {
+          telemetryConnection.connect();
+        });
+        window.addEventListener("offline", function () {
+          telemetryConnection.disconnect();
+        });
+      })();
+    </script>
+
     <script>
       function playAlarm(tankId) {
         try {
