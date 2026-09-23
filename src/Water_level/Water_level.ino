@@ -6,13 +6,24 @@
 
 const int trigPin = D1;
 const int echoPin = D2;
+const int relayPin = D5; // pump relay control pin
 const unsigned long tankDepth = 500UL;
 
 const int VAL_PROBE1 = A0;
 const int VAL_PROBE2 = A1;
 const int VAL_PROBE3 = A2;
 const int VAL_PROBE4 = A3;
-const int WATER_LEVEL = 850; 
+const int WATER_LEVEL = 850;
+
+// --- Issue #22: hysteresis deadband + guard timers ---
+const int PUMP_ON_THRESHOLD = 25;   // turn pump ON when level drops below this
+const int PUMP_OFF_THRESHOLD = 85;  // turn pump OFF when level rises above this
+const unsigned long MIN_RUN_MS = 5000UL;      // minimum time pump stays ON once started
+const unsigned long MIN_COOLDOWN_MS = 5000UL; // minimum time pump stays OFF once stopped
+
+bool pumpOn = false;
+unsigned long lastSwitchTime = 0;
+// -----------------------------------------------------
 
 #define FIREBASE_HOST "*******************"
 #define FIREBASE_AUTH "*************"
@@ -43,12 +54,40 @@ int readUltrasonicLevelPercent()
   return percent;
 }
 
+// Applies a Schmitt-trigger style hysteresis deadband so sensor noise near
+// either threshold does not cause the relay to chatter. A minimum run/cooldown
+// timer provides a second layer of short-cycle protection.
+void updatePumpRelay(int percent, unsigned long now)
+{
+  bool wantOn = pumpOn;
+
+  if (!pumpOn && percent < PUMP_ON_THRESHOLD)  wantOn = true;
+  if (pumpOn  && percent > PUMP_OFF_THRESHOLD) wantOn = false;
+
+  if (wantOn != pumpOn)
+  {
+    unsigned long minWait = pumpOn ? MIN_RUN_MS : MIN_COOLDOWN_MS;
+    if (now - lastSwitchTime >= minWait)
+    {
+      pumpOn = wantOn;
+      lastSwitchTime = now;
+      digitalWrite(relayPin, pumpOn ? HIGH : LOW);
+
+      Firebase.setBool(firebaseData, "PumpOn", pumpOn);
+      Firebase.setInt(firebaseData, "PumpOnThreshold", PUMP_ON_THRESHOLD);
+      Firebase.setInt(firebaseData, "PumpOffThreshold", PUMP_OFF_THRESHOLD);
+    }
+  }
+}
+
 void setup()
 {
-  Serial.begin(11520);
+  Serial.begin(115200);
 
   pinMode(trigPin, OUTPUT);
   pinMode(echoPin, INPUT);
+  pinMode(relayPin, OUTPUT);
+  digitalWrite(relayPin, LOW);
 
   Firebase.begin(FIREBASE_HOST, FIREBASE_AUTH);
 
@@ -68,11 +107,12 @@ void setup()
 }
 
 void loop()
-{ 
+{
   int percent = readUltrasonicLevelPercent();
   if (percent >= 0)
   {
     Firebase.setInt("WaterLevelPercent", percent);
+    updatePumpRelay(percent, millis());
   }
 
   int val1 = analogRead(VAL_PROBE1);
@@ -84,6 +124,6 @@ void loop()
   Firebase.setInt("WaterLevel2", val2);
   Firebase.setInt("WaterLevel3", val3);
   Firebase.setInt("WaterLevel4", val4);
-  
-  delay(3000);    
+
+  delay(3000);
 }
