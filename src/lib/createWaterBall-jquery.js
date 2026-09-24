@@ -350,6 +350,63 @@
         destroy: function() {
         },
 
+        updateTheme: function(themeConfig) {
+
+            return this.each(function(){
+
+                var $this = $(this),
+                    data = $this.data('waterBall');
+
+                if (!data || !themeConfig) {
+                    return;
+                }
+
+                var config = data.config;
+                var colorConfig = {};
+                var colorKeys = [
+                    'textColorRange',
+                    'circle_line_color',
+                    'main_backcolor_range',
+                    'backcolor_range'
+                ];
+
+                for (
+                    var i = 0;
+                    i < colorKeys.length;
+                    i++
+                ) {
+                    var key = colorKeys[i];
+
+                    if (
+                        Object.prototype.hasOwnProperty.call(
+                            themeConfig,
+                            key
+                        )
+                    ) {
+                        colorConfig[key] = themeConfig[key];
+                    }
+                }
+
+                $.extend(true, config, colorConfig);
+
+                if (
+                    Object.prototype.hasOwnProperty.call(
+                        themeConfig,
+                        'backgroundColor'
+                    )
+                ) {
+                    data.canvas.style.backgroundColor =
+                        themeConfig.backgroundColor;
+                }
+
+                /*
+                 * Draw with the current animation state. The animation loop
+                 * remains active and will continue from the same xOffset.
+                 */
+                drawFrame($this, false);
+            });
+        },
+
         updateRange: function(newVal) {
 
             return this.each(function(){
@@ -378,8 +435,24 @@
 
         render: function() {
 
+            var $this = this;
+            var data = $this.data('waterBall');
+
+            drawFrame($this, true);
+
+            /*
+             * Reuse the function created during initialization.
+             */
+            requestAnimationFrame(
+                data.render
+            );
+        }
+    };
+
+    function drawFrame($this, advanceAnimation) {
+
             var data =
-                this.data('waterBall');
+                $this.data('waterBall');
 
             var config =
                 data.config;
@@ -399,57 +472,59 @@
 
             var bg_color1 =
                 config.backcolor_range[
-                    getIndex.call(this)
+                    getIndex.call($this)
                 ][0];
 
             var bg_color2 =
                 config.backcolor_range[
-                    getIndex.call(this)
+                    getIndex.call($this)
                 ][1];
 
             var main_bg_color1 =
                 config.main_backcolor_range[
-                    getIndex.call(this)
+                    getIndex.call($this)
                 ][0];
 
             var main_bg_color2 =
                 config.main_backcolor_range[
-                    getIndex.call(this)
+                    getIndex.call($this)
                 ][1];
 
             /*
              * Reuse the existing circle buffer.
              */
             drawCircle.call(
-                this,
+                $this,
                 buffers.circle
             );
 
-            if (
-                config.nowRange <=
-                config.targetRange
-            ) {
+            if (advanceAnimation) {
+                if (
+                    config.nowRange <=
+                    config.targetRange
+                ) {
 
-                var tmp = 1;
+                    var tmp = 1;
 
-                config.nowRange += tmp;
-            }
+                    config.nowRange += tmp;
+                }
 
-            if (
-                config.nowRange >
-                config.targetRange
-            ) {
+                if (
+                    config.nowRange >
+                    config.targetRange
+                ) {
 
-                var tmp = 1;
+                    var tmp = 1;
 
-                config.nowRange -= tmp;
+                    config.nowRange -= tmp;
+                }
             }
 
             /*
              * Reuse wave buffer 1.
              */
             drawSin.call(
-                this,
+                $this,
                 xOffset + 40,
                 bg_color1,
                 bg_color2,
@@ -460,7 +535,7 @@
              * Reuse wave buffer 2.
              */
             drawSin.call(
-                this,
+                $this,
                 -40 + xOffset,
                 main_bg_color1,
                 main_bg_color2,
@@ -496,17 +571,11 @@
                 0
             );
 
-            config.wave_config.xOffset +=
-                config.wave_config.speed;
-
-            /*
-             * Reuse the function created during initialization.
-             */
-            requestAnimationFrame(
-                data.render
-            );
+            if (advanceAnimation) {
+                config.wave_config.xOffset +=
+                    config.wave_config.speed;
+            }
         }
-    };
 
     $.fn.createWaterBall = function(method) {
 
@@ -541,4 +610,3 @@
     };
 
 })(jQuery);
-
