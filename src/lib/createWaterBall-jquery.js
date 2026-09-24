@@ -1,6 +1,16 @@
 
 (function($){
 
+	var requestNextFrame = function(callback) {
+		if (typeof window !== 'undefined' && window.requestAnimationFrame) {
+			return window.requestAnimationFrame(callback);
+		}
+		if (typeof requestAnimationFrame !== 'undefined') {
+			return requestAnimationFrame(callback);
+		}
+		return setTimeout(callback, 16);
+	};
+
 	function drawSin(xOffset,color1,color2){
         var config = this.data('waterBall').config;
 		var canvas = document.createElement('canvas');
@@ -166,6 +176,21 @@
                 },0);
             });
         },
+        updateConfig: function (newConfig) {
+            return this.each(function () {
+                var $this = $(this),
+                    data = $this.data('waterBall');
+                if (!data || !newConfig) return;
+
+                $.extend(true, data.config, newConfig);
+            });
+        },
+        updateTheme: function (newConfig) {
+            return methods.updateConfig.apply(this, arguments);
+        },
+        refreshTheme: function (newConfig) {
+            return methods.updateConfig.apply(this, arguments);
+        },
         render: function () {
             var config = this.data('waterBall').config;
             var _canvas = this.data('waterBall').canvas;
@@ -199,7 +224,7 @@
             delete cvs3;
 
             config.wave_config.xOffset += config.wave_config.speed;
-            requestAnimationFrame(methods.render.bind(this));
+            requestNextFrame(methods.render.bind(this));
         }
     };
 	$.fn.createWaterBall = function(method) {
