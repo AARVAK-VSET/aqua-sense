@@ -5,8 +5,12 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="author" content="AARVAK-VSET" />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:image" content="../assets/twitter.png" />
+    <meta name="twitter:image:width" content="96" />
+    <meta name="twitter:image:height" content="96" />
     <link
-      href="http://www.jqueryscript.net/css/jquerysctipttop.css"
+      href="https://www.jqueryscript.net/css/jqueryscripttop.css"
       rel="stylesheet"
       type="text/css"
     />
@@ -49,13 +53,45 @@
         text-align: center;
         font-weight: 800;
       }
+
+      #cache-banner {
+        margin-bottom: 20px;
+        font-weight: 600;
+      }
+
+      #connection-status {
+        margin-bottom: 10px;
+        font-weight: 600;
+        text-align: center;
+        padding: 8px;
+        border-radius: 4px;
+      }
+
+      #connection-status.state-connecting {
+        background-color: #fff3cd;
+        color: #856404;
+      }
+
+      #connection-status.state-connected {
+        background-color: #d4edda;
+        color: #155724;
+      }
+
+      #connection-status.state-disconnected,
+      #connection-status.state-error {
+        background-color: #f8d7da;
+        color: #721c24;
+      }
     </style>
   </head>
 
   <body>
     <div class="container">
+      <div id="connection-status" role="status" aria-live="polite"></div>
+      <div id="cache-banner" class="alert alert-info text-center" hidden></div>
       <center>
         <h1 class="title">AquaSense</h1>
+        <img src="../assets/animatedtank.gif" alt="Animated water tank" width="160">
         <p>
           AquaSense is an IOT based Liquid Level Monitoring system
           that has mechanisms to keep the user alerted in case of liquid
@@ -117,30 +153,127 @@
       </div>
       <hr />
       <p>
-        <center><strong>Crafted by AARVAK-VSET</strong></center>
+        <center>
+          <strong>Crafted by AARVAK-VSET</strong>
+          <br />
+          <a href="https://www.linkedin.com" target="_blank" rel="noopener noreferrer">
+            <img src="../assets/linkedin.png" alt="LinkedIn" width="96" height="96" loading="lazy" style="margin-top: 10px;" />
+          </a>
+        </center>
       </p>
     </div>
 
     <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
     <script type="text/javascript" src="lib/createWaterBall-jquery.js"></script>
+    <script type="text/javascript" src="lib/telemetry-manager.js"></script>
+    <script type="text/javascript" src="lib/telemetry-connection.js"></script>
     <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js"></script>
+    <script src="lib/telemetry-manager.js"></script>
+
     <script>
-      //var x=30;
-      //alert("vini");
-      //var qs = window.GetQueryString(query);
+      // Issue #15: exponential backoff reconnect (with jitter) for the
+      // real-time telemetry stream, with connection state surfaced to the UI.
+      (function () {
+        var statusEl = document.getElementById("connection-status");
 
-      //var x = window.getParameterByName('foo');
+        var STATE_LABELS = {
+          connecting: "Connecting to telemetry stream…",
+          connected: "Live: connected to telemetry stream",
+          disconnected: "Disconnected from telemetry stream",
+          error: "Telemetry stream error",
+        };
 
-      /* function getParameterByName(name) {
-     
-        var match = RegExp('[?]' + foo + '=')
-                        .exec(window.location.search);
-     
-        return match ?
-            decodeURIComponent(match[1].replace(/+/g, ' '))
-            : null;
-     
-    }*/
+        function renderState(state, meta) {
+          if (!statusEl) return;
+          statusEl.className = "state-" + state;
+          var label = STATE_LABELS[state] || state;
+          if (state === "disconnected" && meta) {
+            if (meta.exhausted) {
+              label += " — giving up after repeated failures (" + meta.reason + ")";
+            } else if (meta.retryInMs != null) {
+              label +=
+                " — retrying in " +
+                Math.round(meta.retryInMs / 1000) +
+                "s (" + meta.reason + ")";
+            }
+          }
+          statusEl.textContent = label;
+          statusEl.hidden = false;
+        }
+
+        var telemetryConnection = new TelemetryConnection({
+          connect: function (onOpen, onFail) {
+            var aborted = false;
+            fetch("data.json")
+              .then(function (res) {
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                return res.json();
+              })
+              .then(function (data) {
+                if (aborted) return;
+                if (typeof onLiveData === "function" && Array.isArray(data)) {
+                  onLiveData({
+                    tank1: data[0] ? data[0].value : 0,
+                    tank2: data[1] ? data[1].value : 0,
+                    tank3: data[2] ? data[2].value : 0,
+                    tank4: data[3] ? data[3].value : 0,
+                  });
+                }
+                onOpen();
+              })
+              .catch(function (err) {
+                if (!aborted) onFail(err);
+              });
+            return {
+              close: function () {
+                aborted = true;
+              },
+            };
+          },
+          onStateChange: renderState,
+          onLog: function (message, err) {
+            console.error(message, err);
+          },
+          baseDelayMs: 1000,
+          maxDelayMs: 30000,
+        });
+
+        window.telemetryConnection = telemetryConnection;
+        telemetryConnection.connect();
+
+        window.addEventListener("online", function () {
+          telemetryConnection.connect();
+        });
+        window.addEventListener("offline", function () {
+          telemetryConnection.disconnect();
+        });
+      })();
+    </script>
+
+    <script>
+      function playAlarm(tankId) {
+        try {
+          var AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (!AudioContext) return;
+          var ctx = new AudioContext();
+          var osc = ctx.createOscillator();
+          var gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(440, ctx.currentTime);
+          gain.gain.setValueAtTime(0.1, ctx.currentTime);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.2);
+        } catch (e) {
+          console.warn("Audio alarm playback error:", e);
+        }
+      }
+
+      const manager = new TelemetryManager({
+        onAlarm: (id) => playAlarm(id),
+      });
+      window.manager = manager;
 
       function getQueryStringValue(key) {
         return decodeURIComponent(
@@ -155,10 +288,50 @@
           )
         );
       }
+      var telemetryManager = new TelemetryManager({ threshold: 20 });
+      window.manager = telemetryManager;
+
+      function playAlarmAudio(tankId) {
+        try {
+          var AudioCtx = window.AudioContext || window.webkitAudioContext;
+          if (!AudioCtx) return;
+          var ctx = new AudioCtx();
+          var osc = ctx.createOscillator();
+          var gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(440, ctx.currentTime);
+          gain.gain.setValueAtTime(0.1, ctx.currentTime);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.2);
+        } catch (e) {
+          console.warn("Audio alarm playback error:", e);
+        }
+      }
+
+      telemetryManager.onAlarmTrigger(function(alert) {
+        playAlarmAudio(alert.tankId);
+      });
+
       var x = getQueryStringValue("tank1");
       var y = getQueryStringValue("tank2");
       var z = getQueryStringValue("tank3");
       var w = getQueryStringValue("tank4");
+
+      var lvlX = TelemetryManager.normalizeLevel(x);
+      var lvlY = TelemetryManager.normalizeLevel(y);
+      var lvlZ = TelemetryManager.normalizeLevel(z);
+      var lvlW = TelemetryManager.normalizeLevel(w);
+      if (lvlX !== null) telemetryManager.update("tank1", lvlX);
+      if (lvlY !== null) telemetryManager.update("tank2", lvlY);
+      if (lvlZ !== null) telemetryManager.update("tank3", lvlZ);
+      if (lvlW !== null) telemetryManager.update("tank4", lvlW);
+      if (x !== "" && !isNaN(Number(x))) manager.update("tank1", Number(x));
+      if (y !== "" && !isNaN(Number(y))) manager.update("tank2", Number(y));
+      if (z !== "" && !isNaN(Number(z))) manager.update("tank3", Number(z));
+      if (w !== "" && !isNaN(Number(w))) manager.update("tank4", Number(w));
+
       $(".tank1").createWaterBall({
         targetRange: x
       });
@@ -168,8 +341,24 @@
       $(".tank3").createWaterBall({
         targetRange: z
       });
-      $(".tank4").createWaterBall({
-        targetRange: w
+
+      window.addEventListener("online", function() {
+        fetch("data.json")
+          .then(function(res) {
+            if (!res.ok) throw new Error("Network response not ok");
+            return res.json();
+          })
+          .then(function(data) {
+            if (Array.isArray(data)) {
+              onLiveData({
+                tank1: data[0] ? data[0].value : 0,
+                tank2: data[1] ? data[1].value : 0,
+                tank3: data[2] ? data[2].value : 0,
+                tank4: data[3] ? data[3].value : 0
+              });
+            }
+          })
+          .catch(function() {});
       });
 
       var loadingEle = $(".loading");

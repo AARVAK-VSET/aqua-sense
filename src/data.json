@@ -1,6 +1,26 @@
 [
-	{"id":"1","value":"70"},
-	{"id":"2","value":"80"},
-	{"id":"3","value":"40"},
-	{"id":"4","value":"90"}
+  {
+    "id": "1",
+    "value": "70",
+    "capacity": 100,
+    "threshold": 20
+  },
+  {
+    "id": "2",
+    "value": "80",
+    "capacity": 100,
+    "threshold": 20
+  },
+  {
+    "id": "3",
+    "value": "40",
+    "capacity": 100,
+    "threshold": 20
+  },
+  {
+    "id": "4",
+    "value": "90",
+    "capacity": 100,
+    "threshold": 20
+  }
 ]
