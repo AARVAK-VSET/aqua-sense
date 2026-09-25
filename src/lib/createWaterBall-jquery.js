@@ -194,9 +194,18 @@
             return this.each(function(){
 
                 var $this = $(this),
-                    data = $this.data('waterBall'),
+                    data = $this.data('waterBall');
 
-                    _config = {
+                if (data) {
+                    if (data.animationFrameId != null) {
+                        cancelAnimationFrame(data.animationFrameId);
+                    }
+
+                    $this.removeData('waterBall');
+                    data = null;
+                }
+
+                var _config = {
 
                         cvs_config: {
                             width: 220,
@@ -327,7 +336,9 @@
 
                         config: _config,
 
-                        buffers: buffers
+                        buffers: buffers,
+
+                        animationFrameId: null
                     };
 
                     /*
@@ -348,6 +359,24 @@
         },
 
         destroy: function() {
+
+            return this.each(function() {
+
+                var $this = $(this),
+                    data = $this.data('waterBall');
+
+                if (!data) {
+                    return;
+                }
+
+                if (data.animationFrameId != null) {
+                    cancelAnimationFrame(data.animationFrameId);
+                    data.animationFrameId = null;
+                }
+
+                $this.removeData('waterBall');
+                $this.empty();
+            });
         },
 
         updateTheme: function(themeConfig) {
@@ -443,7 +472,7 @@
             /*
              * Reuse the function created during initialization.
              */
-            requestAnimationFrame(
+            data.animationFrameId = requestAnimationFrame(
                 data.render
             );
         }
