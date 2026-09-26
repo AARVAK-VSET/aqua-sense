@@ -219,7 +219,8 @@
                             waveHeight: 5,
                             axisLength: 220,
                             speed: 0.09,
-                            xOffset: 0
+                            xOffset: 0,
+                            easing: 0.08
                         },
 
                         circle_config: {
@@ -450,15 +451,13 @@
                 var config =
                     $this.data('waterBall').config;
 
-                config.targetRange = 0;
-                config.nowRange = 0;
+                /*
+                 * Keep the current fill level (nowRange) untouched
+                 * so the animation eases from wherever it currently
+                 * is toward the new target, instead of dropping to 0%.
+                 */
+                config.targetRange = newVal;
                 config.isLoading = false;
-
-                setTimeout(function(){
-
-                    config.targetRange = newVal;
-
-                }, 0);
             });
         },
 
@@ -528,24 +527,24 @@
             );
 
             if (advanceAnimation) {
-                if (
-                    config.nowRange <=
-                    config.targetRange
-                ) {
 
-                    var tmp = 1;
+                var diff =
+                    config.targetRange -
+                    config.nowRange;
 
-                    config.nowRange += tmp;
-                }
+                if (Math.abs(diff) > 0.5) {
 
-                if (
-                    config.nowRange >
-                    config.targetRange
-                ) {
+                    config.nowRange +=
+                        diff * config.wave_config.easing;
 
-                    var tmp = 1;
+                } else if (diff !== 0) {
 
-                    config.nowRange -= tmp;
+                    /*
+                     * Snap to the exact target once close enough
+                     * so nowRange settles instead of drifting or
+                     * oscillating around targetRange forever.
+                     */
+                    config.nowRange = config.targetRange;
                 }
             }
 
