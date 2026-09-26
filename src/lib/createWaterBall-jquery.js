@@ -187,6 +187,22 @@
         return data.length - 1;
     }
 
+    /*
+     * data_range can be configured with more tiers than the color
+     * palettes it maps into (e.g. a custom 4-tier data_range with the
+     * default 3-entry backcolor_range/main_backcolor_range), so every
+     * lookup is clamped independently against the specific array it is
+     * about to index, instead of assuming all three arrays share a length.
+     */
+    function clampIndex(index, colorArray) {
+
+        if (!colorArray || colorArray.length === 0) {
+            return 0;
+        }
+
+        return Math.min(index, colorArray.length - 1);
+    }
+
     var methods = {
 
         init: function(config) {
@@ -194,9 +210,18 @@
             return this.each(function(){
 
                 var $this = $(this),
-                    data = $this.data('waterBall'),
+                    data = $this.data('waterBall');
 
-                    _config = {
+                if (data) {
+                    if (data.animationFrameId != null) {
+                        cancelAnimationFrame(data.animationFrameId);
+                    }
+
+                    $this.removeData('waterBall');
+                    data = null;
+                }
+
+                var _config = {
 
                         cvs_config: {
                             width: 220,
@@ -210,7 +235,8 @@
                             waveHeight: 5,
                             axisLength: 220,
                             speed: 0.09,
-                            xOffset: 0
+                            xOffset: 0,
+                            easing: 0.08
                         },
 
                         circle_config: {
@@ -327,7 +353,9 @@
 
                         config: _config,
 
-                        buffers: buffers
+                        buffers: buffers,
+
+                        animationFrameId: null
                     };
 
                     /*
@@ -348,6 +376,24 @@
         },
 
         destroy: function() {
+
+            return this.each(function() {
+
+                var $this = $(this),
+                    data = $this.data('waterBall');
+
+                if (!data) {
+                    return;
+                }
+
+                if (data.animationFrameId != null) {
+                    cancelAnimationFrame(data.animationFrameId);
+                    data.animationFrameId = null;
+                }
+
+                $this.removeData('waterBall');
+                $this.empty();
+            });
         },
 
         updateTheme: function(themeConfig) {
@@ -421,15 +467,13 @@
                 var config =
                     $this.data('waterBall').config;
 
-                config.targetRange = 0;
-                config.nowRange = 0;
+                /*
+                 * Keep the current fill level (nowRange) untouched
+                 * so the animation eases from wherever it currently
+                 * is toward the new target, instead of dropping to 0%.
+                 */
+                config.targetRange = newVal;
                 config.isLoading = false;
-
-                setTimeout(function(){
-
-                    config.targetRange = newVal;
-
-                }, 0);
             });
         },
 
@@ -443,7 +487,7 @@
             /*
              * Reuse the function created during initialization.
              */
-            requestAnimationFrame(
+            data.animationFrameId = requestAnimationFrame(
                 data.render
             );
         }
@@ -470,9 +514,12 @@
             var xOffset =
                 config.wave_config.xOffset;
 
+            var rangeIndex =
+                getIndex.call($this);
+
             var bg_color1 =
                 config.backcolor_range[
-                    getIndex.call($this)
+                    clampIndex(rangeIndex, config.backcolor_range)
                 ][0];
 
             var bg_color2 =
@@ -499,24 +546,24 @@
             );
 
             if (advanceAnimation) {
-                if (
-                    config.nowRange <=
-                    config.targetRange
-                ) {
 
-                    var tmp = 1;
+                var diff =
+                    config.targetRange -
+                    config.nowRange;
 
-                    config.nowRange += tmp;
-                }
+                if (Math.abs(diff) > 0.5) {
 
-                if (
-                    config.nowRange >
-                    config.targetRange
-                ) {
+                    config.nowRange +=
+                        diff * config.wave_config.easing;
 
-                    var tmp = 1;
+                } else if (diff !== 0) {
 
-                    config.nowRange -= tmp;
+                    /*
+                     * Snap to the exact target once close enough
+                     * so nowRange settles instead of drifting or
+                     * oscillating around targetRange forever.
+                     */
+                    config.nowRange = config.targetRange;
                 }
             }
 

@@ -175,7 +175,71 @@
       // real-time telemetry stream, with connection state surfaced to the UI.
       (function () {
         var statusEl = document.getElementById("connection-status");
+        var cacheBanner = document.getElementById("cache-banner");
+var CACHE_KEY = "aquasense:lastSnapshot";
 
+function saveTelemetrySnapshot(tanks) {
+  try {
+    localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({
+        savedAt: new Date().toISOString(),
+        tanks: tanks,
+      })
+    );
+  } catch (e) {
+    console.warn("Unable to save telemetry snapshot:", e);
+  }
+}
+
+function loadTelemetrySnapshot() {
+  try {
+    var raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+
+    var snapshot = JSON.parse(raw);
+
+    if (
+      !snapshot ||
+      typeof snapshot.savedAt !== "string" ||
+      !snapshot.tanks ||
+      typeof snapshot.tanks !== "object"
+    ) {
+      return null;
+    }
+
+    return snapshot;
+  } catch (e) {
+    console.warn("Unable to load telemetry snapshot:", e);
+    return null;
+  }
+}
+
+function showCachedBanner(savedAt) {
+  if (!cacheBanner) return;
+
+  var date = new Date(savedAt);
+  if (isNaN(date.getTime())) return;
+
+  cacheBanner.textContent =
+    "Offline: showing cached data from " + date.toLocaleString();
+  cacheBanner.hidden = false;
+}
+
+function hideCachedBanner() {
+  if (cacheBanner) {
+    cacheBanner.hidden = true;
+  }
+}
+function renderTankLevels(tanks) {
+  Object.keys(tanks).forEach(function (tankId) {
+    var element = document.querySelector("." + tankId);
+
+    if (element) {
+      $(element).createWaterBall("updateRange", tanks[tankId]);
+    }
+  });
+}
         var STATE_LABELS = {
           connecting: "Connecting to telemetry stream…",
           connected: "Live: connected to telemetry stream",
@@ -200,7 +264,32 @@
           statusEl.textContent = label;
           statusEl.hidden = false;
         }
+        function onLiveData(data) {
+          if (!data || typeof data !== "object") return;
 
+          var tanks = {
+            tank1: Number(data.tank1),
+            tank2: Number(data.tank2),
+            tank3: Number(data.tank3),
+            tank4: Number(data.tank4),
+     };
+
+     Object.keys(tanks).forEach(function (tankId) {
+        if (!isFinite(tanks[tankId])) {
+            tanks[tankId] = 0;
+        }
+    });
+
+     saveTelemetrySnapshot(tanks);
+
+     if (window.telemetryManager) {
+        Object.keys(tanks).forEach(function (tankId) {
+           window.telemetryManager.update(tankId, tanks[tankId]);
+       });
+     }
+     renderTankLevels(tanks);
+    hideCachedBanner();
+    }
         var telemetryConnection = new TelemetryConnection({
           connect: function (onOpen, onFail) {
             var aborted = false;
@@ -239,6 +328,15 @@
         });
 
         window.telemetryConnection = telemetryConnection;
+        var cachedSnapshot = loadTelemetrySnapshot();
+
+        if (cachedSnapshot) {
+          renderTankLevels(cachedSnapshot.tanks);
+
+          if (!navigator.onLine) {
+            showCachedBanner(cachedSnapshot.savedAt);
+          }
+        }
         telemetryConnection.connect();
 
         window.addEventListener("online", function () {
@@ -289,7 +387,7 @@
         );
       }
       var telemetryManager = new TelemetryManager({ threshold: 20 });
-      window.manager = telemetryManager;
+      window.telemetryManager = telemetryManager;
 
       function playAlarmAudio(tankId) {
         try {
@@ -333,13 +431,13 @@
       if (w !== "" && !isNaN(Number(w))) manager.update("tank4", Number(w));
 
       $(".tank1").createWaterBall({
-        targetRange: x
+        targetRange: lvlX !== null ? lvlX : 0
       });
       $(".tank2").createWaterBall({
-        targetRange: y
+        targetRange: lvlY !== null ? lvlY : 0
       });
       $(".tank3").createWaterBall({
-        targetRange: z
+        targetRange: lvlZ !== null ? lvlZ : 0
       });
 
       window.addEventListener("online", function() {
