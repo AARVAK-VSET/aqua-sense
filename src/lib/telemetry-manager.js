@@ -12,9 +12,11 @@
 
   TelemetryManager.prototype.update = function (tankId, level) {
     if (typeof level !== "number" || !isFinite(level)) return;
+
     const tank =
       this.tanks[tankId] ||
       (this.tanks[tankId] = { state: "NORMAL", level: 100 });
+
     tank.level = level;
 
     if (tank.state === "NORMAL" && level < CRITICAL_PCT) {
@@ -23,11 +25,13 @@
       this.onAlarm(tankId, level);
     } else if (tank.state === "ALARM" && level >= RECOVER_PCT) {
       tank.state = "NORMAL";
+      this.alarmCount = Math.max(0, this.alarmCount - 1);
       this.onClear(tankId, level);
     }
   };
 
   global.TelemetryManager = TelemetryManager;
+
   if (typeof module !== "undefined" && module.exports) {
     module.exports = TelemetryManager;
   }
