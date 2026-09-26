@@ -525,17 +525,17 @@
 
             var bg_color2 =
                 config.backcolor_range[
-                    clampIndex(rangeIndex, config.backcolor_range)
+                    getIndex.call($this)
                 ][1];
 
             var main_bg_color1 =
                 config.main_backcolor_range[
-                    clampIndex(rangeIndex, config.main_backcolor_range)
+                    getIndex.call($this)
                 ][0];
 
             var main_bg_color2 =
                 config.main_backcolor_range[
-                    clampIndex(rangeIndex, config.main_backcolor_range)
+                    getIndex.call($this)
                 ][1];
 
             /*
