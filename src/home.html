@@ -175,7 +175,71 @@
       // real-time telemetry stream, with connection state surfaced to the UI.
       (function () {
         var statusEl = document.getElementById("connection-status");
+        var cacheBanner = document.getElementById("cache-banner");
+var CACHE_KEY = "aquasense:lastSnapshot";
 
+function saveTelemetrySnapshot(tanks) {
+  try {
+    localStorage.setItem(
+      CACHE_KEY,
+      JSON.stringify({
+        savedAt: new Date().toISOString(),
+        tanks: tanks,
+      })
+    );
+  } catch (e) {
+    console.warn("Unable to save telemetry snapshot:", e);
+  }
+}
+
+function loadTelemetrySnapshot() {
+  try {
+    var raw = localStorage.getItem(CACHE_KEY);
+    if (!raw) return null;
+
+    var snapshot = JSON.parse(raw);
+
+    if (
+      !snapshot ||
+      typeof snapshot.savedAt !== "string" ||
+      !snapshot.tanks ||
+      typeof snapshot.tanks !== "object"
+    ) {
+      return null;
+    }
+
+    return snapshot;
+  } catch (e) {
+    console.warn("Unable to load telemetry snapshot:", e);
+    return null;
+  }
+}
+
+function showCachedBanner(savedAt) {
+  if (!cacheBanner) return;
+
+  var date = new Date(savedAt);
+  if (isNaN(date.getTime())) return;
+
+  cacheBanner.textContent =
+    "Offline: showing cached data from " + date.toLocaleString();
+  cacheBanner.hidden = false;
+}
+
+function hideCachedBanner() {
+  if (cacheBanner) {
+    cacheBanner.hidden = true;
+  }
+}
+function renderTankLevels(tanks) {
+  Object.keys(tanks).forEach(function (tankId) {
+    var element = document.querySelector("." + tankId);
+
+    if (element) {
+      $(element).createWaterBall("updateRange", tanks[tankId]);
+    }
+  });
+}
         var STATE_LABELS = {
           connecting: "Connecting to telemetry stream…",
           connected: "Live: connected to telemetry stream",
@@ -200,7 +264,32 @@
           statusEl.textContent = label;
           statusEl.hidden = false;
         }
+        function onLiveData(data) {
+          if (!data || typeof data !== "object") return;
 
+          var tanks = {
+            tank1: Number(data.tank1),
+            tank2: Number(data.tank2),
+            tank3: Number(data.tank3),
+            tank4: Number(data.tank4),
+     };
+
+     Object.keys(tanks).forEach(function (tankId) {
+        if (!isFinite(tanks[tankId])) {
+            tanks[tankId] = 0;
+        }
+    });
+
+     saveTelemetrySnapshot(tanks);
+
+     if (window.telemetryManager) {
+        Object.keys(tanks).forEach(function (tankId) {
+           window.telemetryManager.update(tankId, tanks[tankId]);
+       });
+     }
+     renderTankLevels(tanks);
+    hideCachedBanner();
+    }
         var telemetryConnection = new TelemetryConnection({
           connect: function (onOpen, onFail) {
             var aborted = false;
@@ -239,6 +328,15 @@
         });
 
         window.telemetryConnection = telemetryConnection;
+        var cachedSnapshot = loadTelemetrySnapshot();
+
+        if (cachedSnapshot) {
+          renderTankLevels(cachedSnapshot.tanks);
+
+          if (!navigator.onLine) {
+            showCachedBanner(cachedSnapshot.savedAt);
+          }
+        }
         telemetryConnection.connect();
 
         window.addEventListener("online", function () {
@@ -289,7 +387,7 @@
         );
       }
       var telemetryManager = new TelemetryManager({ threshold: 20 });
-      window.manager = telemetryManager;
+      window.telemetryManager = telemetryManager;
 
       function playAlarmAudio(tankId) {
         try {
@@ -340,27 +438,7 @@
       });
       $(".tank3").createWaterBall({
         targetRange: z
-      });
-
-      window.addEventListener("online", function() {
-        fetch("data.json")
-          .then(function(res) {
-            if (!res.ok) throw new Error("Network response not ok");
-            return res.json();
-          })
-          .then(function(data) {
-            if (Array.isArray(data)) {
-              onLiveData({
-                tank1: data[0] ? data[0].value : 0,
-                tank2: data[1] ? data[1].value : 0,
-                tank3: data[2] ? data[2].value : 0,
-                tank4: data[3] ? data[3].value : 0
-              });
-            }
-          })
-          .catch(function() {});
-      });
-
+});
       var loadingEle = $(".loading");
       var loading_width = loadingEle.width(),
         loading_height = loadingEle.height();
