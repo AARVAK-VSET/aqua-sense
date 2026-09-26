@@ -209,7 +209,7 @@
                   telemetryManager.updateTank("tank1", lvl);
               }
               $(".tank1").createWaterBall({
-                  targetRange: x
+                  targetRange: lvl !== null ? lvl : 0
               });
               var loadingEle = $(".loading");
               var loading_width = loadingEle.width(),
@@ -252,7 +252,7 @@
                   telemetryManager.updateTank("tank2", lvl);
               }
               $(".tank2").createWaterBall({
-                  targetRange: y
+                  targetRange: lvl !== null ? lvl : 0
               });
               var loadingEle = $(".loading");
               var loading_width = loadingEle.width(),
@@ -294,7 +294,7 @@
                   telemetryManager.updateTank("tank3", lvl);
               }
               $(".tank3").createWaterBall({
-                  targetRange: z
+                  targetRange: lvl !== null ? lvl : 0
               });
               var loadingEle = $(".loading");
               var loading_width = loadingEle.width(),
@@ -337,7 +337,7 @@
                   telemetryManager.updateTank("tank4", lvl);
               }
               $(".tank4").createWaterBall({
-                  targetRange: w
+                  targetRange: lvl !== null ? lvl : 0
               });
               var loadingEle = $(".loading");
               var loading_width = loadingEle.width(),

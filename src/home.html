@@ -333,13 +333,13 @@
       if (w !== "" && !isNaN(Number(w))) manager.update("tank4", Number(w));
 
       $(".tank1").createWaterBall({
-        targetRange: x
+        targetRange: lvlX !== null ? lvlX : 0
       });
       $(".tank2").createWaterBall({
-        targetRange: y
+        targetRange: lvlY !== null ? lvlY : 0
       });
       $(".tank3").createWaterBall({
-        targetRange: z
+        targetRange: lvlZ !== null ? lvlZ : 0
       });
 
       window.addEventListener("online", function() {
