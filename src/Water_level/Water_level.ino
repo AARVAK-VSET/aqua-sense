@@ -106,12 +106,21 @@ void setup()
   Firebase.reconnectWiFi(true);
 }
 
+// Converts a raw 10-bit ADC reading (0-1023) from an analog probe into
+// a calibrated, clamped 0-100 percentage value before it is transmitted.
+int convertAdcToPercent(int rawValue)
+{
+  int clampedRaw = constrain(rawValue, 0, 1023);
+  long scaled = (long)clampedRaw * 100L / 1023L;
+  return (int)constrain(scaled, 0L, 100L);
+}
+
 void loop()
 {
   int percent = readUltrasonicLevelPercent();
   if (percent >= 0)
   {
-    Firebase.setInt("WaterLevelPercent", percent);
+    Firebase.setInt(firebaseData, "WaterLevelPercent", percent);
     updatePumpRelay(percent, millis());
   }
 
@@ -120,10 +129,15 @@ void loop()
   int val3 = analogRead(VAL_PROBE3);
   int val4 = analogRead(VAL_PROBE4);
 
-  Firebase.setInt("WaterLevel1", val1);
-  Firebase.setInt("WaterLevel2", val2);
-  Firebase.setInt("WaterLevel3", val3);
-  Firebase.setInt("WaterLevel4", val4);
+  int percent1 = convertAdcToPercent(val1);
+  int percent2 = convertAdcToPercent(val2);
+  int percent3 = convertAdcToPercent(val3);
+  int percent4 = convertAdcToPercent(val4);
+
+  Firebase.setInt(firebaseData, "WaterLevel1", percent1);
+  Firebase.setInt(firebaseData, "WaterLevel2", percent2);
+  Firebase.setInt(firebaseData, "WaterLevel3", percent3);
+  Firebase.setInt(firebaseData, "WaterLevel4", percent4);
 
   delay(3000);
 }

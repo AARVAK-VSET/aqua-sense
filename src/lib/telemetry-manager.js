@@ -27,6 +27,22 @@
     }
   };
 
+  // Clamps/validates a raw incoming telemetry value to the 0-100 percent
+  // range expected by the gauges. Returns null for values that cannot be
+  // interpreted as a number at all (so callers can skip updating).
+  TelemetryManager.normalizeLevel = function (raw) {
+    var num = Number(raw);
+
+    if (raw === null || raw === undefined || raw === "" || !isFinite(num)) {
+      return null;
+    }
+
+    if (num < 0) return 0;
+    if (num > 100) return 100;
+
+    return num;
+  };
+
   global.TelemetryManager = TelemetryManager;
   if (typeof module !== "undefined" && module.exports) {
     module.exports = TelemetryManager;
