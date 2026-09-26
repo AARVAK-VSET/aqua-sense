@@ -187,6 +187,22 @@
         return data.length - 1;
     }
 
+    /*
+     * data_range can be configured with more tiers than the color
+     * palettes it maps into (e.g. a custom 4-tier data_range with the
+     * default 3-entry backcolor_range/main_backcolor_range), so every
+     * lookup is clamped independently against the specific array it is
+     * about to index, instead of assuming all three arrays share a length.
+     */
+    function clampIndex(index, colorArray) {
+
+        if (!colorArray || colorArray.length === 0) {
+            return 0;
+        }
+
+        return Math.min(index, colorArray.length - 1);
+    }
+
     var methods = {
 
         init: function(config) {
@@ -499,9 +515,12 @@
             var xOffset =
                 config.wave_config.xOffset;
 
+            var rangeIndex =
+                getIndex.call($this);
+
             var bg_color1 =
                 config.backcolor_range[
-                    getIndex.call($this)
+                    clampIndex(rangeIndex, config.backcolor_range)
                 ][0];
 
             var bg_color2 =
