@@ -431,14 +431,34 @@ function renderTankLevels(tanks) {
       if (w !== "" && !isNaN(Number(w))) manager.update("tank4", Number(w));
 
       $(".tank1").createWaterBall({
-        targetRange: x
+        targetRange: lvlX !== null ? lvlX : 0
       });
       $(".tank2").createWaterBall({
-        targetRange: y
+        targetRange: lvlY !== null ? lvlY : 0
       });
       $(".tank3").createWaterBall({
-        targetRange: z
-});
+        targetRange: lvlZ !== null ? lvlZ : 0
+      });
+
+      window.addEventListener("online", function() {
+        fetch("data.json")
+          .then(function(res) {
+            if (!res.ok) throw new Error("Network response not ok");
+            return res.json();
+          })
+          .then(function(data) {
+            if (Array.isArray(data)) {
+              onLiveData({
+                tank1: data[0] ? data[0].value : 0,
+                tank2: data[1] ? data[1].value : 0,
+                tank3: data[2] ? data[2].value : 0,
+                tank4: data[3] ? data[3].value : 0
+              });
+            }
+          })
+          .catch(function() {});
+      });
+
       var loadingEle = $(".loading");
       var loading_width = loadingEle.width(),
         loading_height = loadingEle.height();
